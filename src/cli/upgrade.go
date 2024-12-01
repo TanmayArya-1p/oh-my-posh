@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/build"
+	"github.com/jandedobbeleer/oh-my-posh/src/config"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
 	"github.com/jandedobbeleer/oh-my-posh/src/terminal"
 	"github.com/jandedobbeleer/oh-my-posh/src/upgrade"
@@ -32,22 +33,30 @@ var upgradeCmd = &cobra.Command{
 			return
 		}
 
+		sh := os.Getenv("POSH_SHELL")
+
 		env := &runtime.Terminal{}
 		env.Init(nil)
 		defer env.Close()
 
-		terminal.Init(env.Shell())
+		terminal.Init(sh)
 		fmt.Print(terminal.StartProgress())
 
-		latest, err := upgrade.Latest(env)
+		configFile := config.Path(configFlag)
+		cfg := config.Load(configFile, sh, false)
+		cfg.Upgrade.Cache = env.Cache()
+
+		latest, err := cfg.Upgrade.Latest()
 		if err != nil {
 			fmt.Printf("\n❌ %s\n\n%s", err, terminal.StopProgress())
 			os.Exit(1)
 			return
 		}
 
+		cfg.Upgrade.Version = latest
+
 		if force {
-			executeUpgrade(latest)
+			executeUpgrade(cfg.Upgrade)
 			return
 		}
 
@@ -61,7 +70,7 @@ var upgradeCmd = &cobra.Command{
 		}
 
 		if version != latest {
-			executeUpgrade(latest)
+			executeUpgrade(cfg.Upgrade)
 			return
 		}
 
@@ -69,8 +78,8 @@ var upgradeCmd = &cobra.Command{
 	},
 }
 
-func executeUpgrade(latest string) {
-	err := upgrade.Run(latest)
+func executeUpgrade(cfg *upgrade.Config) {
+	err := upgrade.Run(cfg)
 	fmt.Print(terminal.StopProgress())
 	if err == nil {
 		return
